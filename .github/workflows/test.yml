@@ -110,12 +110,29 @@ jobs:
           [[ "$DUMP_KEY" == "ci-prefix/supabase/$SNAPSHOT/dump.pgcustom" ]]
           echo "dump-key=$DUMP_KEY"
 
+      # The run below must fail without falling back to DATABASE_URL or to a config
+      # file in the workspace, and still report the failure to its ping URL.
+      - name: Prepare a ping receiver and a stray config file
+        run: |
+          nohup python3 test/ping-receiver.py > "$RUNNER_TEMP/pings.log" 2>&1 &
+          for _ in $(seq 20); do
+            if curl -s -o /dev/null -X POST http://127.0.0.1:8099/ready; then break; fi
+            sleep 0.5
+          done
+          cat > backupdrill.config.json <<'EOF'
+          {
+            "databaseUrl": "postgresql://postgres:test-only-password@127.0.0.1:5432/postgres",
+            "storage": { "bucket": "backups", "accessKeyId": "test-access-key", "secretAccessKey": "test-secret-key-not-real" }
+          }
+          EOF
+
       - name: Run the action with an empty database-url
         id: no-database-url
         continue-on-error: true
         uses: ./
         with:
           database-url: ""
+          ping-url: http://127.0.0.1:8099/ping
           s3-endpoint: http://127.0.0.1:8333
           s3-region: us-east-1
           s3-bucket: backups
@@ -129,7 +146,11 @@ jobs:
         run: |
           [[ "$OUTCOME" == "failure" ]]
           [[ -z "$DUMP_KEY" ]]
-          echo "outcome=$OUTCOME, no snapshot written"
+          cat "$RUNNER_TEMP/pings.log"
+          grep -qx /ping/start "$RUNNER_TEMP/pings.log"
+          grep -qx /ping/fail "$RUNNER_TEMP/pings.log"
+          if grep -qx /ping "$RUNNER_TEMP/pings.log"; then exit 1; fi
+          echo "outcome=$OUTCOME, no snapshot written, start and fail pings sent"
 
       - name: Remove the S3 store
         if: always()

@@ -36,6 +36,11 @@ export BACKUPDRILL_PG_RESTORE="/usr/lib/postgresql/${POSTGRES_VERSION}/bin/pg_re
 result="$(mktemp "${RUNNER_TEMP:-/tmp}/backupdrill-result.XXXXXX")"
 trap 'rm -f "$result"' EXIT
 
+# The action takes its settings from its inputs and BACKUPDRILL_* variables only. A
+# backupdrill.config.json in the workspace, say from a checked-out repository, could
+# otherwise fill in a database or bucket the workflow never named. --config pointing at
+# a file that doesn't exist makes the CLI skip the file.
+no_config="${result}.none.json"
 cli=(npx --yes "backupdrill@${BACKUPDRILL_VERSION_SPEC}")
 
 case "$command" in
@@ -44,7 +49,7 @@ case "$command" in
       echo "::error::drill must be \"true\" or \"false\"."
       exit 1
     fi
-    "${cli[@]}" backup >"$result"
+    "${cli[@]}" backup --config "$no_config" >"$result"
     node "$GITHUB_ACTION_PATH/scripts/write-outputs.mjs" "$result"
     ;;
   drill)
@@ -52,7 +57,7 @@ case "$command" in
       echo "::error::The backup step did not report a snapshot to drill."
       exit 1
     fi
-    "${cli[@]}" drill --snapshot "$SNAPSHOT" >"$result"
+    "${cli[@]}" drill --config "$no_config" --snapshot "$SNAPSHOT" >"$result"
     ;;
   *)
     echo "::error::Unknown command: use backup or drill."

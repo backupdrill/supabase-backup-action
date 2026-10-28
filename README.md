@@ -81,7 +81,7 @@ Pass the optional ones through the matching inputs, for example `supabase-storag
 | `postgres-version` | `"17"` | Major version of `pg_dump` and `pg_restore` to install. It has to be at least your Supabase Postgres version. |
 | `backupdrill-version` | `"2"` | backupdrill CLI version from npm. `"2"` takes the newest 2.x release on every run. |
 
-Settings that have no input, such as `BACKUPDRILL_SCHEMAS` (which schemas to dump, `public` by default), `BACKUPDRILL_S3_PREFIX` or `BACKUPDRILL_SUPABASE_STORAGE_BUCKETS`, can be set as environment variables on the job. The CLI documentation lists all of them.
+Settings that have no input, such as `BACKUPDRILL_SCHEMAS` (which schemas to dump, `public` by default), `BACKUPDRILL_S3_PREFIX` or `BACKUPDRILL_SUPABASE_STORAGE_BUCKETS`, can be set as environment variables on the job. The CLI documentation lists all of them. The action doesn't read a `backupdrill.config.json` file, even if your workspace has one.
 
 ## Outputs
 
