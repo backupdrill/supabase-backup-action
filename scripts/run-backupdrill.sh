@@ -19,21 +19,11 @@ while IFS= read -r name; do
   if [[ -z "${!name}" ]]; then unset "$name"; fi
 done < <(compgen -e | grep '^BACKUPDRILL_' || true)
 
-# Required inputs are checked here because GitHub doesn't enforce `required` for
-# composite actions. An empty database URL is the dangerous one: the CLI would fall
-# back to DATABASE_URL, which in many jobs points at some other database.
-require_input() {  # $1 = environment variable, $2 = input name
-  if [[ -z "${!1:-}" ]]; then
-    echo "::error::$2 is empty. Check that the secret it comes from is set."
-    exit 1
-  fi
-}
-require_input BACKUPDRILL_S3_BUCKET s3-bucket
-require_input BACKUPDRILL_S3_ACCESS_KEY_ID s3-access-key-id
-require_input BACKUPDRILL_S3_SECRET_ACCESS_KEY s3-secret-access-key
-if [[ "$command" == "backup" ]]; then
-  require_input BACKUPDRILL_DATABASE_URL database-url
-fi
+# With BACKUPDRILL_DATABASE_URL empty, the CLI falls back to DATABASE_URL, which in many
+# jobs points at the app's own database. Removing it means an empty database-url stops
+# at the CLI's own config check, which names what is missing and sends the /fail ping.
+# GitHub doesn't enforce `required` on composite action inputs, so that check is the guard.
+unset DATABASE_URL
 
 # npm's "new version available" notice is noise in a backup log.
 export npm_config_update_notifier=false

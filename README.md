@@ -59,7 +59,7 @@ The secret names match the ones in the CLI's own example workflow, so if you alr
 | `BACKUPDRILL_SUPABASE_STORAGE_ENDPOINT`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` | no | To back up Storage files as well. Generate the keys under **Storage → Settings → S3 Access Keys** and copy the endpoint and region from the same page. These keys bypass row-level security, so keep them in secrets. |
 | `BACKUPDRILL_PING_URL` | no | A Healthchecks.io ping URL, so you hear about failed runs and runs that never started. |
 
-Pass the optional ones through the matching inputs, for example `supabase-storage-endpoint: ${{ secrets.BACKUPDRILL_SUPABASE_STORAGE_ENDPOINT }}`. A secret that isn't set comes through as an empty string, and the CLI treats empty as not set.
+Pass the optional ones through the matching inputs, for example `supabase-storage-endpoint: ${{ secrets.BACKUPDRILL_SUPABASE_STORAGE_ENDPOINT }}`. A secret that isn't set comes through as an empty string, and the action treats an empty input the same as one you left out. For the four required inputs that means the run stops with an error naming the missing setting.
 
 ## Inputs
 

@@ -19,6 +19,9 @@ jobs:
     # The output check below makes sure this one did.
     env:
       BACKUPDRILL_S3_PREFIX: ci-prefix
+      # Many jobs set DATABASE_URL for the app's own database. The CLI falls back to it
+      # when no database URL is given, so the action must never let that happen.
+      DATABASE_URL: postgresql://postgres:test-only-password@127.0.0.1:5432/postgres
     services:
       postgres:
         image: postgres:17
@@ -106,6 +109,27 @@ jobs:
         run: |
           [[ "$DUMP_KEY" == "ci-prefix/supabase/$SNAPSHOT/dump.pgcustom" ]]
           echo "dump-key=$DUMP_KEY"
+
+      - name: Run the action with an empty database-url
+        id: no-database-url
+        continue-on-error: true
+        uses: ./
+        with:
+          database-url: ""
+          s3-endpoint: http://127.0.0.1:8333
+          s3-region: us-east-1
+          s3-bucket: backups
+          s3-access-key-id: test-access-key
+          s3-secret-access-key: test-secret-key-not-real
+
+      - name: Check that it failed instead of backing up DATABASE_URL
+        env:
+          OUTCOME: ${{ steps.no-database-url.outcome }}
+          DUMP_KEY: ${{ steps.no-database-url.outputs.dump-key }}
+        run: |
+          [[ "$OUTCOME" == "failure" ]]
+          [[ -z "$DUMP_KEY" ]]
+          echo "outcome=$OUTCOME, no snapshot written"
 
       - name: Remove the S3 store
         if: always()
