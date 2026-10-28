@@ -1,0 +1,128 @@
+name: Supabase Backup with BackupDrill
+description: Back up a Supabase database and Storage files to your own S3, R2 or B2 bucket, and optionally test-restore it.
+author: BackupDrill
+
+branding:
+  icon: database
+  color: green
+
+inputs:
+  database-url:
+    description: Session pooler connection string of the Supabase project, password included. Pass it from a secret.
+    required: true
+  s3-bucket:
+    description: Bucket the backups go to.
+    required: true
+  s3-access-key-id:
+    description: Access key ID for that bucket. Pass it from a secret.
+    required: true
+  s3-secret-access-key:
+    description: Secret access key for that bucket. Pass it from a secret.
+    required: true
+  s3-endpoint:
+    description: S3-compatible endpoint for R2, B2 or a self-hosted store. Leave empty for AWS S3.
+    required: false
+    default: ""
+  s3-region:
+    description: Bucket region. The CLI uses "auto" when this is empty.
+    required: false
+    default: ""
+  project-name:
+    description: Name used in the bucket path and the manifest. The CLI uses "supabase" when this is empty.
+    required: false
+    default: ""
+  supabase-storage-endpoint:
+    description: S3 endpoint of the project's Storage, to back up Storage files too. Set it together with the access key ID and secret, or leave all of them empty.
+    required: false
+    default: ""
+  supabase-storage-region:
+    description: Region shown next to the Storage S3 endpoint in the Supabase dashboard.
+    required: false
+    default: ""
+  supabase-storage-access-key-id:
+    description: Storage S3 access key ID (Dashboard, Storage, Settings, S3 Access Keys).
+    required: false
+    default: ""
+  supabase-storage-secret-access-key:
+    description: Storage S3 secret access key.
+    required: false
+    default: ""
+  ping-url:
+    description: Healthchecks.io ping URL. The backup, and the drill if it runs, report start, success and failure to it.
+    required: false
+    default: ""
+  drill:
+    description: Set to "true" to restore the new snapshot into a throwaway Postgres container and check it.
+    required: false
+    default: "false"
+  postgres-version:
+    description: Major version of the PostgreSQL client tools to install. Must be at least your Supabase Postgres version.
+    required: false
+    default: "17"
+  backupdrill-version:
+    description: Version of the backupdrill CLI from npm. The default "2" means the newest 2.x release.
+    required: false
+    default: "2"
+
+outputs:
+  snapshot:
+    description: Name of the snapshot folder the backup wrote, a UTC timestamp.
+    value: ${{ steps.backup.outputs.snapshot }}
+  dump-key:
+    description: Object key of the database dump inside the bucket.
+    value: ${{ steps.backup.outputs.dump-key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install PostgreSQL client tools
+      shell: bash
+      env:
+        POSTGRES_VERSION: ${{ inputs.postgres-version }}
+      run: '"$GITHUB_ACTION_PATH/scripts/install-postgres-client.sh"'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: "24"
+
+    # Inputs reach the scripts as environment variables, never as text pasted into
+    # the script and never as command-line arguments, which other processes can read.
+    - name: Back up
+      id: backup
+      shell: bash
+      env:
+        POSTGRES_VERSION: ${{ inputs.postgres-version }}
+        BACKUPDRILL_VERSION_SPEC: ${{ inputs.backupdrill-version }}
+        DRILL_INPUT: ${{ inputs.drill }}
+        BACKUPDRILL_DATABASE_URL: ${{ inputs.database-url }}
+        BACKUPDRILL_S3_BUCKET: ${{ inputs.s3-bucket }}
+        BACKUPDRILL_S3_ACCESS_KEY_ID: ${{ inputs.s3-access-key-id }}
+        BACKUPDRILL_S3_SECRET_ACCESS_KEY: ${{ inputs.s3-secret-access-key }}
+        BACKUPDRILL_S3_ENDPOINT: ${{ inputs.s3-endpoint }}
+        BACKUPDRILL_S3_REGION: ${{ inputs.s3-region }}
+        BACKUPDRILL_PROJECT_NAME: ${{ inputs.project-name }}
+        BACKUPDRILL_SUPABASE_STORAGE_ENDPOINT: ${{ inputs.supabase-storage-endpoint }}
+        BACKUPDRILL_SUPABASE_STORAGE_REGION: ${{ inputs.supabase-storage-region }}
+        BACKUPDRILL_SUPABASE_STORAGE_ACCESS_KEY_ID: ${{ inputs.supabase-storage-access-key-id }}
+        BACKUPDRILL_SUPABASE_STORAGE_SECRET_ACCESS_KEY: ${{ inputs.supabase-storage-secret-access-key }}
+        BACKUPDRILL_PING_URL: ${{ inputs.ping-url }}
+      run: '"$GITHUB_ACTION_PATH/scripts/run-backupdrill.sh" backup'
+
+    # The drill only reads the bucket, so it gets the bucket settings and nothing
+    # that can reach the database or Storage.
+    - name: Restore drill
+      if: inputs.drill == 'true'
+      shell: bash
+      env:
+        POSTGRES_VERSION: ${{ inputs.postgres-version }}
+        BACKUPDRILL_VERSION_SPEC: ${{ inputs.backupdrill-version }}
+        SNAPSHOT: ${{ steps.backup.outputs.snapshot }}
+        BACKUPDRILL_S3_BUCKET: ${{ inputs.s3-bucket }}
+        BACKUPDRILL_S3_ACCESS_KEY_ID: ${{ inputs.s3-access-key-id }}
+        BACKUPDRILL_S3_SECRET_ACCESS_KEY: ${{ inputs.s3-secret-access-key }}
+        BACKUPDRILL_S3_ENDPOINT: ${{ inputs.s3-endpoint }}
+        BACKUPDRILL_S3_REGION: ${{ inputs.s3-region }}
+        BACKUPDRILL_PROJECT_NAME: ${{ inputs.project-name }}
+        BACKUPDRILL_PING_URL: ${{ inputs.ping-url }}
+      run: '"$GITHUB_ACTION_PATH/scripts/run-backupdrill.sh" drill'

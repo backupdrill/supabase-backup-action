@@ -1,0 +1,91 @@
+# Runs the action against a throwaway Postgres 17 and a local S3-compatible store
+# (SeaweedFS), then drills the snapshot it wrote. No Supabase project or cloud bucket
+# is involved, so it needs no secrets.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup-and-drill:
+    runs-on: ubuntu-latest
+    # Settings without an input of their own reach the CLI as environment variables.
+    # The output check below makes sure this one did.
+    env:
+      BACKUPDRILL_S3_PREFIX: ci-prefix
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # SeaweedFS runs as a plain container because service containers can't take a
+      # start command. Its S3 API answers once the master has elected itself, which
+      # takes a few seconds, so bucket creation is retried until it succeeds.
+      - name: Start an S3-compatible store
+        run: |
+          docker run -d --name s3 -p 127.0.0.1:8333:8333 \
+            -v "$PWD/test/s3.json:/etc/seaweedfs/s3.json:ro" \
+            chrislusf/seaweedfs:3.97 server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json \
+            -master.volumeSizeLimitMB=32 -master.volumePreallocate=false -volume.max=10
+          for _ in $(seq 60); do
+            if echo "s3.bucket.create -name backups" |
+              docker exec -i s3 weed shell -master=localhost:9333 -filer=localhost:8888 2>&1 |
+              grep -q "created bucket"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs s3
+          exit 1
+
+      # psql comes from the same image as the service, so the step doesn't depend on
+      # which client the runner image ships.
+      - name: Load test data
+        run: |
+          docker run --rm -i --network host postgres:17 \
+            psql -X -q -v ON_ERROR_STOP=1 \
+            postgresql://postgres:test-only-password@127.0.0.1:5432/postgres < test/seed.sql
+
+      - name: Run the action
+        id: backup
+        uses: ./
+        with:
+          database-url: postgresql://postgres:test-only-password@127.0.0.1:5432/postgres
+          s3-endpoint: http://127.0.0.1:8333
+          s3-region: us-east-1
+          s3-bucket: backups
+          s3-access-key-id: test-access-key
+          s3-secret-access-key: test-secret-key-not-real
+          project-name: ci
+          drill: "true"
+
+      - name: Check the outputs
+        env:
+          SNAPSHOT: ${{ steps.backup.outputs.snapshot }}
+          DUMP_KEY: ${{ steps.backup.outputs.dump-key }}
+        run: |
+          [[ "$SNAPSHOT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
+          [[ "$DUMP_KEY" == "ci-prefix/ci/$SNAPSHOT/dump.pgcustom" ]]
+          echo "snapshot=$SNAPSHOT dump-key=$DUMP_KEY"
+
+      - name: Remove the S3 store
+        if: always()
+        run: docker rm -fv s3
