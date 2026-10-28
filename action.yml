@@ -85,6 +85,9 @@ runs:
       uses: actions/setup-node@v7
       with:
         node-version: "24"
+        # The action installs no dependencies, and the automatic npm cache would fail
+        # on a caller repo whose package.json names npm but has no lockfile.
+        package-manager-cache: false
 
     # Inputs reach the scripts as environment variables, never as text pasted into
     # the script and never as command-line arguments, which other processes can read.

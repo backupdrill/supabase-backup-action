@@ -86,6 +86,27 @@ jobs:
           [[ "$DUMP_KEY" == "ci-prefix/ci/$SNAPSHOT/dump.pgcustom" ]]
           echo "snapshot=$SNAPSHOT dump-key=$DUMP_KEY"
 
+      # Optional inputs left out arrive as empty strings. The snapshot must still land
+      # under the CLI's default project name, not under an empty one.
+      - name: Run the action with optional inputs left out
+        id: defaults
+        uses: ./
+        with:
+          database-url: postgresql://postgres:test-only-password@127.0.0.1:5432/postgres
+          s3-endpoint: http://127.0.0.1:8333
+          s3-region: us-east-1
+          s3-bucket: backups
+          s3-access-key-id: test-access-key
+          s3-secret-access-key: test-secret-key-not-real
+
+      - name: Check the default project name
+        env:
+          SNAPSHOT: ${{ steps.defaults.outputs.snapshot }}
+          DUMP_KEY: ${{ steps.defaults.outputs.dump-key }}
+        run: |
+          [[ "$DUMP_KEY" == "ci-prefix/supabase/$SNAPSHOT/dump.pgcustom" ]]
+          echo "dump-key=$DUMP_KEY"
+
       - name: Remove the S3 store
         if: always()
         run: docker rm -fv s3

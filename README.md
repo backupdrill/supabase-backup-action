@@ -38,7 +38,7 @@ jobs:
           s3-access-key-id: ${{ secrets.BACKUPDRILL_S3_ACCESS_KEY_ID }}
           s3-secret-access-key: ${{ secrets.BACKUPDRILL_S3_SECRET_ACCESS_KEY }}
           s3-endpoint: ${{ secrets.BACKUPDRILL_S3_ENDPOINT }} # leave the secret unset for AWS S3
-          s3-region: auto
+          s3-region: ${{ secrets.BACKUPDRILL_S3_REGION }} # auto for R2, the bucket's region for AWS S3
           project-name: my-app
           drill: "true"
 ```
@@ -55,6 +55,7 @@ The secret names match the ones in the CLI's own example workflow, so if you alr
 | `BACKUPDRILL_S3_BUCKET` | yes | The bucket the backups go to. |
 | `BACKUPDRILL_S3_ACCESS_KEY_ID`, `BACKUPDRILL_S3_SECRET_ACCESS_KEY` | yes | Keys that can write to that bucket. Keys limited to this one bucket are the safer choice. |
 | `BACKUPDRILL_S3_ENDPOINT` | for R2, B2 and other S3-compatible stores | The S3 endpoint of your provider. Leave it out for AWS S3. |
+| `BACKUPDRILL_S3_REGION` | for AWS S3 | The bucket's region, such as `us-east-1`. R2 takes `auto`, which is also what the CLI uses when this is empty. |
 | `BACKUPDRILL_SUPABASE_STORAGE_ENDPOINT`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` | no | To back up Storage files as well. Generate the keys under **Storage → Settings → S3 Access Keys** and copy the endpoint and region from the same page. These keys bypass row-level security, so keep them in secrets. |
 | `BACKUPDRILL_PING_URL` | no | A Healthchecks.io ping URL, so you hear about failed runs and runs that never started. |
 
@@ -69,7 +70,7 @@ Pass the optional ones through the matching inputs, for example `supabase-storag
 | `s3-access-key-id` | | Access key ID for the bucket. Required. |
 | `s3-secret-access-key` | | Secret access key for the bucket. Required. |
 | `s3-endpoint` | empty | S3-compatible endpoint for R2, B2 or a self-hosted store. Empty means AWS S3. |
-| `s3-region` | empty | Bucket region. Empty means `auto`, which works for R2. |
+| `s3-region` | empty | Bucket region. Empty means `auto`, which works for R2. AWS S3 needs the bucket's real region. |
 | `project-name` | empty | Name used in the bucket path and the manifest. Empty means `supabase`. |
 | `supabase-storage-endpoint` | empty | Storage S3 endpoint. Set it with the key ID and secret to back up Storage files, or leave all three empty for the database only. |
 | `supabase-storage-region` | empty | Storage S3 region. |
@@ -108,12 +109,12 @@ It needs Docker, which GitHub-hosted Ubuntu runners have. On a self-hosted runne
 
 ## Egress and cost
 
-Every backup pulls your data out of Supabase, and that counts as egress on your Supabase bill. These figures were checked against Supabase's egress documentation and pricing page on 2026-07-10:
+Every backup pulls your data out of Supabase, and that counts as egress on your Supabase bill. These figures come from Supabase's egress and cost control documentation, checked on 2026-10-29:
 
-- Backup traffic is uncached egress, $0.09 per GB above the allowance your plan includes.
-- Included uncached egress per month: Free 5 GB, Pro 250 GB, Team 250 GB.
-- On Pro and Team the Spend Cap is on by default. If a backup takes you past the allowance, Supabase throttles the whole project's egress for the rest of the month and the backup fails. Turn the Spend Cap off if you'd rather pay the overage.
-- Free never bills overage. Going over 5 GB starts Supabase's Fair Use process instead, which can end in egress restrictions, so large backups on Free aren't viable.
+- Backup traffic is uncached egress. Each plan includes some every month: Free 5 GB, Pro 250 GB, Team 250 GB. Above that, Pro and Team pay $0.09 per GB.
+- Pro has a Spend Cap, and it is on by default. With it on, Supabase doesn't bill the overage. Its docs say usage past the allowance is then disallowed until the next billing cycle, and that Fair Use restrictions apply if you keep going over. Either way your backups can start failing. Turn the Spend Cap off if you'd rather pay for the extra egress.
+- Team has no Spend Cap and is billed for the overage.
+- Free never bills overage. If you keep going over 5 GB, Supabase notifies you and then restricts the project under its Fair Use Policy, so large backups on Free aren't viable.
 
 Rough monthly cost on Pro with the Spend Cap off, if backups are your only egress:
 
@@ -127,8 +128,8 @@ Cost grows with size times frequency. The weekly schedule in the example is a se
 ## Versions
 
 - `@v1` is this action's own version. Within v1 the inputs and outputs above stay compatible.
-- v1 always runs backupdrill CLI 2.x. By default it takes the newest 2.x release from npm on each run, so CLI fixes reach you without a change to your workflow. If you want every run to use the exact same CLI, pin it, for example `backupdrill-version: "2.7.1"`.
-- The CLI follows semantic versioning. A CLI 3.x would only ship in a new major version of this action.
+- By default, v1 takes the newest backupdrill CLI 2.x release from npm on each run, so CLI fixes reach you without editing your workflow. To use the same CLI on every run, pin a 2.x release, for example `backupdrill-version: "2.7.1"`.
+- The CLI follows semantic versioning. Moving the default to CLI 3.x would come with a new major version of this action.
 
 ## Requirements
 
