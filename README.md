@@ -14,7 +14,7 @@ Supabase's built-in backups stay in Supabase's account, and they leave gaps:
 - On Pro, daily backups are kept for 7 days. Projects on newer Postgres builds, or with point-in-time recovery turned on, get physical backups. You can restore those inside Supabase, but you can't download them from the dashboard.
 - Storage files aren't in the database backup. It only holds the metadata that points to them.
 
-This action keeps a copy that you hold, in a bucket you control, for as long as you want to keep it.
+This action saves backups to your own bucket, and you decide how long to keep them.
 
 ## Usage
 
