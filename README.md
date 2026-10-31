@@ -1,10 +1,20 @@
 # Supabase Backup with BackupDrill
 
-A GitHub Action that backs up a Supabase project's Postgres database, and its Storage files if you want them, into an S3, Cloudflare R2 or Backblaze B2 bucket that you own. It runs the open-source [backupdrill CLI](https://backupdrill.com/docs/cli) (MIT). Turn on `drill` and it also restores the new snapshot into a throwaway Postgres and checks that it comes back.
+A GitHub Action for automated Supabase backups. On the schedule you set, it backs up a Supabase project's Postgres database into an S3, Cloudflare R2 or Backblaze B2 bucket that you own, plus the project's Storage files once you give it the Storage S3 keys. It runs the open-source [backupdrill CLI](https://backupdrill.com/docs/cli) (MIT). Turn on `drill` and it also restores the new snapshot into a throwaway Postgres and checks that it comes back.
 
 The data goes from Supabase through the GitHub runner straight into your bucket. Nothing is sent to BackupDrill.
 
 The full walkthrough, including where to find each secret and how to restore, is here: [Automatic Supabase backups with GitHub Actions](https://backupdrill.com/guides/supabase-backup-github-actions).
+
+## Why keep your own Supabase backup
+
+Supabase's built-in backups stay in Supabase's account, and they leave gaps:
+
+- On the Free plan you can't access daily backups. The one exception is the snapshot Supabase keeps when it pauses a project.
+- On Pro, daily backups are kept for 7 days. Projects on newer Postgres builds, or with point-in-time recovery turned on, get physical backups. You can restore those inside Supabase, but you can't download them from the dashboard.
+- Storage files aren't in the database backup. It only holds the metadata that points to them.
+
+This action saves backups to your own bucket, and you decide how long to keep them.
 
 ## Usage
 
